@@ -1,31 +1,62 @@
+#include "consigne.h"
+#include "define.h"
+#include "regulation.h"
+#include "simulateur.h"
+#include "visualisationC.h"
+#include "visualisationT.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include "simulateur.h"
-#include "autotests.h"
+#include <unistd.h>
 int main(){
+	//INITIALISATION
+	temp_t temperature; // Création d'une structure de température pour stocker la température intérieure et extérieure
+	temperature.exterieure = 14.0; // Initialisation de la température extérieure à 14°C
+	temperature.interieure = 15.0; // Initialisation de la température intérieure à 15°C
+	
+	//Définition des constantes de régulation PID
+	float Kp=1.1; // Constante proportionnelle
+	float Ki=0.2; // Constante intégrale
+	float Kd=0.15; // Constante dérivée
 
-	temp_t temperature;
-	temperature.exterieure = 14.0;
-	temperature.interieure = 15.0;
-	struct simParam_s*  monSimulateur_ps = simConstruct(temperature); // creation du simulateur, puissance intialis�e � 0%
-	int i=0; // increment de boucle
-	float puissance = 70.0; // puissance de chauffage
-	for(i=0;i< 30;i++){
-		temperature=simCalc(puissance,monSimulateur_ps); // simulation de l'environnement
+	int nT = 1; // Nombre de températures précédentes à prendre en compte pour le calcul de l'erreur dérivée
+	float i_erreur=0; // Initialisation de l'erreur intégrale
+	struct simParam_s*  monSimulateur_ps = simConstruct(temperature); // creation du simulateur, puissance intialisée à 0%
+	printf("pointeur avant:%f\n",i_erreur);
+	float puissance = 70.0; // Puissance de chauffage.
+	float consi = 20.0; // Consigne de température.
+	float temp_past=14.5; // Température avant la chauffe c'est pas réaliste.
+	while(consi>5){ // boucle tant que la consigne est supérieure à 5
+		// Affichage de la puissance et de la consigne actuelles
+		// Calcul de la puissance à appliquer avec une régulation PID
+		puissance=regulation_PID(2,consi,&temperature,temp_past,nT,&i_erreur,Kp,Ki,Kd);
+		// Affichage de la puissance et de la consigne actuelles
+		// Mise à jour de la consigne à atteindre
+		consi=consigne(consi);
+		// Limitation de la puissance à 100% si elle est supérieure, ou à 0% si elle est inférieure
+		if (puissance >= 100) {
+      		puissance = 100;
+    	} else if (puissance <= 0) {
+      		puissance = 0;
+    	}
+		// Affichage de la puissance sur un écran de visualisation
+		visualisationC(puissance);
+		// Stockage de la température actuelle pour le calcul de la dérivée
+		temp_past=temperature.interieure;
+		// Simulation du comportement de l'environnement en fonction de la puissance appliquée
+		temperature=simCalc(puissance,monSimulateur_ps);
+		// Affichage de la température sur un écran de visualisation
+		visualisationT(temperature);
+		// Pause de 100 millisecondes pour éviter une boucle trop rapide
+		usleep(100000);
 	}
-	float score1=0,score2=0,score3=0,score4=0,score5=0;
-score1 = testVisualisationT();
-score2 = testConsigne();
-score3 = testVisualisationC();
-score4 = testRegulationTOR();
-score5 = testRegulationPID();
-printf("----- Auto tests results: -----\n");
-printf("testVisualisationT\t:score=%g%%\n",score1*100);
-printf("testConsigne \t\t: score=%g %%\n",score2*100);
-printf("testVisualisationC\t:score=%g %%\n",score3*100);
-printf("testRegulationTOR\t:score=%g %%\n",score4*100);
-printf("testRegulationPID\t:score=%g %%\n",score5*100);
-return EXIT_SUCCESS;
-	simDestruct(monSimulateur_ps); // destruction de simulateur
+	// Si la consigne est inférieure à 5, on détruit la simulation
+	if (consi<5)
+	{
+		simDestruct(monSimulateur_ps);
+	}
+
+	// Retourne 0 pour indiquer une fin de programme réussie
 	return EXIT_SUCCESS;
+
+
 }
